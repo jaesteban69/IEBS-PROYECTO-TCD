@@ -1,0 +1,198 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+// Importar el contrato ERC-20
+import "./TCDERC20.sol";
+
+
+contract tcd {
+    // Estructura para representar un perfil de usuario
+    struct Profile {
+        string name;
+        string bio;
+        uint256 age;
+        bool isPremium;
+        // Otros atributos que desees incluir
+    }
+
+    // Mapeo de direcciones a perfiles de usuario
+    mapping(address => Profile) public profiles;
+
+    // Mapeo para almacenar los intereses expresados entre usuarios
+    mapping(address => mapping(address => bool)) public interests;
+
+    // Mapeo para almacenar los "matches" entre usuarios
+    mapping(address => mapping(address => bool)) public matches;
+
+    // Lista de todas las direcciones de perfiles que se han dado de alta
+    address[] public addressList;
+    uint256 public addressCount;
+
+    // Contrato del token ERC-20
+  TCDERC20 public tokenContract;
+
+    // Evento para notificar cuando un usuario actualiza a una cuenta premium
+    event UpgradedToPremium(address indexed user);
+
+    // Evento para notificar cuando se ha creado un nuevo perfil
+    event ProfileCreated(address indexed userAddress, string name, uint256 age);
+
+    // Evento para notificar cuando se ha expresado interés entre usuarios
+    event InterestExpressed(address indexed from, address indexed to);
+
+    // Evento para notificar cuando se ha creado un "match"
+    event MatchCreated(address indexed user1, address indexed user2);
+
+    // Constructor para inicializar el contrato del token ERC-20
+    constructor(address _tokenAddress) {
+        tokenContract = TCDERC20(_tokenAddress);
+    }
+
+    // Función para que un usuario cree su perfil
+    function createProfile(string memory _name, string memory _bio, uint256 _age) public {
+        // Verifica que el usuario no haya creado ya un perfil
+        require(bytes(profiles[msg.sender].name).length == 0, "Profile already exists");
+
+        // Crea un nuevo perfil y lo asocia con la dirección del usuario
+        profiles[msg.sender] = Profile(_name, _bio, _age, false);
+
+        // Agregar la dirección del perfil a la lista de direcciones
+        addressList.push(msg.sender);
+        addressCount++;
+
+        // Emite el evento ProfileCreated
+        emit ProfileCreated(msg.sender, _name, _age);
+    }
+
+    // Función para que los usuarios actualicen su perfil
+    function updateProfile(string memory _name, string memory _bio, uint256 _age) public {
+        // Verifica que el usuario tenga un perfil existente
+        require(bytes(profiles[msg.sender].name).length > 0, "Profile not found");
+
+        // Actualiza la información del perfil
+        profiles[msg.sender].name = _name;
+        profiles[msg.sender].bio = _bio;
+        profiles[msg.sender].age = _age;
+    }
+
+    // Función para que los usuarios eliminen su perfil
+    function deleteProfile() public {
+        // Verifica que el usuario tenga un perfil existente
+        require(bytes(profiles[msg.sender].name).length > 0, "Profile not found");
+
+        // Elimina el perfil del usuario
+        delete profiles[msg.sender];
+
+        // Eliminar la dirección del perfil de la lista de direcciones
+        for (uint256 i = 0; i < addressCount; i++) {
+            if (addressList[i] == msg.sender) {
+                addressList[i] = addressList[addressCount - 1];
+                addressList.pop();
+                addressCount--;
+                break;
+            }
+        }
+    }
+
+    // Función para que un usuario exprese interés en otro usuario
+    function expressInterest(address _otherUser) public {
+        // Verificar que el usuario que expresa interés tiene un perfil existente
+        require(bytes(profiles[msg.sender].name).length > 0, "Profile not found");
+
+        // Verificar que el usuario al que se le muestra interés tiene un perfil existente
+        require(bytes(profiles[_otherUser].name).length > 0, "Profile of other user not found");
+
+        // Almacenar el interés del usuario que llama en el otro usuario
+        interests[msg.sender][_otherUser] = true;
+
+        // Emitir evento de interés expresado
+        emit InterestExpressed(msg.sender, _otherUser);
+    }
+
+    // Función para establecer un "match" entre dos usuarios
+    function createMatch(address _otherUser) public {
+        // Verificar que ambos usuarios tengan perfiles existentes
+        require(bytes(profiles[msg.sender].name).length > 0 && bytes(profiles[_otherUser].name).length > 0, "Both users must have profiles");
+
+        // Verificar que los dos usuarios se han expresado interés mutuo
+        require(interests[msg.sender][_otherUser] && interests[_otherUser][msg.sender], "Mutual interest required");
+
+        // Crear el "match" bidireccional entre los dos usuarios
+        matches[msg.sender][_otherUser] = true;
+        matches[_otherUser][msg.sender] = true;
+
+        // Emitir evento de "match" creado
+        emit MatchCreated(msg.sender, _otherUser);
+    }
+
+// Función para procesar pagos
+    function processPayment(uint256 _amount) public payable {
+        // Verificar que la cantidad enviada sea igual al monto especificado
+        require(msg.value == _amount, "Payment amount mismatch");
+
+        // Transferir Ether al propietario del contrato
+        payable(address(this)).transfer(msg.value);
+
+        // Emitir evento de pago procesado
+        emit PaymentProcessed(msg.sender, msg.value, _amount);
+    }
+
+    // Evento para notificar cuando se ha procesado un pago
+    event PaymentProcessed(address indexed payer, uint256 amountSent, uint256 amountExpected);
+
+
+   // Función para que los usuarios actualicen su cuenta a una cuenta premium
+function upgradeToPremium() public {
+    // Verificar que el usuario tenga un perfil existente
+    require(bytes(profiles[msg.sender].name).length > 0, "Profile not found");
+    
+    // Verificar que el usuario no sea ya un usuario premium
+    require(!profiles[msg.sender].isPremium, "User is already premium");
+
+    // Verificar que el contrato tenga suficientes tokens
+    uint256 amount = 100; // Cantidad de tokens requerida para la actualización
+    require(tokenContract.balanceOf(address(this)) >= amount, "Insufficient tokens in contract");
+
+    // Transferir tokens desde la cuenta del usuario al contrato
+    require(tokenContract.transferFrom(msg.sender, address(this), amount), "Token transfer failed");
+
+    // Establecer la cuenta del usuario como premium
+    profiles[msg.sender].isPremium = true;
+
+    // Emitir evento de actualización a cuenta premium
+    emit UpgradedToPremium(msg.sender);
+}
+
+
+    // Función para que los usuarios reporten perfiles inapropiados
+    function reportProfile(address _profileAddress) public {
+        //  implementar la lógica para reportar perfiles inapropiados
+    }
+
+    // Función para que los usuarios bloqueen a otros usuarios
+    function blockUser(address _userAddress) public {
+        //  implementar la lógica para bloquear a otros usuarios
+    }
+
+    // Función para obtener el número total de "matches" de un usuario
+    function getMatchCount() public view returns (uint256) {
+        uint256 matchCount = 0;
+        for (uint256 i = 0; i < addressCount; i++) {
+            address userAddress = addressList[i];
+            if (matches[msg.sender][userAddress]) {
+                matchCount++;
+            }
+        }
+        return matchCount;
+    }
+
+    // Función para generar estadísticas y análisis sobre el uso de la aplicación
+    function generateAnalytics() public view returns (string memory) {
+        //  implementar la lógica para generar estadísticas y análisis sobre el uso de la aplicación
+    }
+
+    // Función para obtener todas las direcciones de los perfiles que se han dado de alta
+    function getAllProfileAddresses() public view returns (address[] memory) {
+        return addressList;
+    }
+}
