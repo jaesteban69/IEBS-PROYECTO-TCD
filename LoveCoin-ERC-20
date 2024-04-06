@@ -1,9 +1,11 @@
-// SPDX-License-Identifier: GPL-3.0 
-pragma solidity 0.8.20;
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
- 
-contract ERC20TKIM is ERC20 { 
- constructor() ERC20("lovecoin", "LC") { 
- _mint(msg.sender, 3000*10**18);
- } 
+
+contract TCDERC20 is ERC20 {
+    constructor() ERC20("LoveCoin", "LC") {
+        uint256 initialSupply = 10000 * (10 ** uint256(decimals()));
+        _mint(msg.sender, initialSupply);
+    }
 }
