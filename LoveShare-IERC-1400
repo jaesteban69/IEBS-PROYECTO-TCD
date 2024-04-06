@@ -1,0 +1,86 @@
+// STO LoveShare
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.19;
+
+import "./IERC1400.sol";
+import "./IERC1400TokensRecipient.sol";
+import "./IERC1400TokensSender.sol";
+
+contract LoveShare is IERC1400 {
+    string private _name;
+    string private _symbol;
+    uint8 private _decimals;
+    uint256 private _totalSupply;
+    mapping(address => uint256) private _balances;
+    mapping(address => mapping(address => uint256)) private _allowed;
+    mapping(address => mapping(address => uint256)) private _authorizedSenders;
+    mapping(address => mapping(address => uint256)) private _authorizedRecipients;
+
+    constructor() {
+        _name = "LoveShare";
+        _symbol = "LS";
+        _decimals = 18;
+        _totalSupply = 0;
+    }
+
+    function name() external view override returns (string memory) {
+        return _name;
+    }
+
+    function symbol() external view override returns (string memory) {
+        return _symbol;
+    }
+
+    function decimals() external view override returns (uint8) {
+        return _decimals;
+    }
+
+    function totalSupply() external view override returns (uint256) {
+        return _totalSupply;
+    }
+
+    function balanceOf(address tokenHolder) external view override returns (uint256) {
+        return _balances[tokenHolder];
+    }
+
+    function transferWithData(address to, uint256 value, bytes calldata data) external override {
+        _transfer(msg.sender, to, value);
+        emit TransferWithData(msg.sender, to, value, data);
+    }
+
+    function authorizeOperator(address operator) external override {
+        _authorizedSenders[msg.sender][operator] = 1;
+        _authorizedRecipients[operator][msg.sender] = 1;
+        emit AuthorizedOperator(operator, msg.sender);
+    }
+
+    function revokeOperator(address operator) external override {
+        _authorizedSenders[msg.sender][operator] = 0;
+        _authorizedRecipients[operator][msg.sender] = 0;
+        emit RevokedOperator(operator, msg.sender);
+    }
+
+    function isOperatorFor(address operator, address tokenHolder) external view override returns (bool) {
+        return _authorizedSenders[tokenHolder][operator] == 1;
+    }
+
+    function transfer(address to, uint256 value) external override {
+        _transfer(msg.sender, to, value);
+    }
+
+    function _transfer(address from, address to, uint256 value) private {
+        require(to != address(0), "Invalid transfer to address(0)");
+        require(_balances[from] >= value, "Insufficient balance");
+
+        _balances[from] -= value;
+        _balances[to] += value;
+
+        emit Transfer(from, to, value);
+    }
+
+    // Events
+    event TransferWithData(address indexed from, address indexed to, uint256 value, bytes data);
+    event AuthorizedOperator(address indexed operator, address indexed tokenHolder);
+    event RevokedOperator(address indexed operator, address indexed tokenHolder);
+    event Transfer(address indexed from, address indexed to, uint256 value);
+}
