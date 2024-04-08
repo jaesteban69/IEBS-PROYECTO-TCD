@@ -12,7 +12,6 @@ contract tcd {
         string bio;
         uint256 age;
         bool isPremium;
-        // Otros atributos que desees incluir
     }
 
     // Mapeo de direcciones a perfiles de usuario
